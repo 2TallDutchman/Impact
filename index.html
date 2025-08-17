@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deforestation: A Quantified Risk vs. Impact Matrix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .matrix-container {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            border-left: 2px solid #94a3b8; /* slate-400 */
+            border-bottom: 2px solid #94a3b8; /* slate-400 */
+        }
+        .axis-label {
+            font-weight: 600;
+            color: #475569; /* slate-600 */
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .scale-label {
+            color: #64748b; /* slate-500 */
+        }
+        .quadrant-label {
+            position: absolute;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #cbd5e1; /* slate-300 */
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            z-index: 1;
+        }
+        .q-top-right { top: 0.75rem; right: 0.75rem; }
+        .q-top-left { top: 0.75rem; left: 0.75rem; }
+        .q-bottom-right { bottom: 0.75rem; right: 0.75rem; }
+        .q-bottom-left { bottom: 0.75rem; left: 0.75rem; }
+
+        /* Gridlines */
+        .gridlines {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            opacity: 0.5;
+        }
+        .gridlines div {
+            border-right: 1px dashed #cbd5e1; /* slate-300 */
+            border-top: 1px dashed #cbd5e1; /* slate-300 */
+        }
+        .gridlines div:nth-child(10n) { border-right: 1px solid #b6c4d5; }
+        .gridlines div:nth-of-type(n+91) { border-bottom: none; }
+
+        .data-point {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out;
+            z-index: 10;
+        }
+        .data-point:hover {
+            transform: scale(1.1);
+            z-index: 20;
+        }
+        .data-point .icon-wrapper {
+            display: flex;
+            align-items: center;
+            flex-direction: column;
+        }
+        .data-point .icon {
+            width: 3.5rem; height: 3.5rem;
+            border-radius: 9999px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .data-point .industry-label {
+            font-weight: 600; font-size: 0.8rem;
+            color: #334155; /* slate-700 */
+            background-color: rgba(255,255,255,0.7);
+            padding: 2px 6px; border-radius: 4px;
+            margin-top: 0.25rem;
+            white-space: nowrap;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            bottom: 110%; left: 50%;
+            transform: translateX(-50%);
+            width: 230px;
+            background-color: white;
+            border-radius: 0.5rem; padding: 0.75rem;
+            font-size: 0.8rem; line-height: 1.4;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            border-top-width: 4px;
+            text-align: left;
+            opacity: 0; visibility: hidden;
+            transition: opacity 0.2s, visibility 0.2s;
+            pointer-events: none;
+            z-index: 30;
+        }
+        .data-point:hover .tooltip { opacity: 1; visibility: visible; }
+        .tooltip h4 { font-weight: 700; margin-bottom: 0.5rem; font-size: 0.9rem; }
+        sup { font-size: 0.65em; vertical-align: super; margin-left: 1px; }
+
+        /* Industry Specific Colors */
+        .agriculture { --industry-color: #16a34a; --bg-color: #dcfce7; --text-color: #15803d; }
+        .food-beverage { --industry-color: #f97316; --bg-color: #ffedd5; --text-color: #c2410c; }
+        .automotive { --industry-color: #475569; --bg-color: #e2e8f0; --text-color: #334155; }
+        .personal-care { --industry-color: #ec4899; --bg-color: #fce7f3; --text-color: #db2777; }
+        .pharma { --industry-color: #3b82f6; --bg-color: #dbeafe; --text-color: #2563eb; }
+        .software { --industry-color: #6366f1; --bg-color: #e0e7ff; --text-color: #4f46e5; }
+        .mining { --industry-color: #a16207; --bg-color: #fefce8; --text-color: #854d0e; }
+        .logging { --industry-color: #78350f; --bg-color: #fbeee8; --text-color: #6e300e; }
+
+
+        .data-point .icon { background-color: var(--bg-color); color: var(--text-color); }
+        .tooltip { border-color: var(--industry-color); }
+
+        /* Positioning of data points (bottom/left)
+           X-Axis: Risk (0% to 100% left to right)
+           Y-Axis: Impact (0% to 100% bottom to top) */
+        .agriculture { bottom: 90%; left: 90%; transform: translate(-50%, 50%); }
+        .food-beverage { bottom: 80%; left: 85%; transform: translate(-50%, 50%); }
+        .automotive { bottom: 60%; left: 70%; transform: translate(-50%, 50%); }
+        .personal-care { bottom: 30%; left: 80%; transform: translate(-50%, 50%); }
+        .pharma { bottom: 10%; left: 78%; transform: translate(-50%, 50%); }
+        .software { bottom: 10%; left: 15%; transform: translate(-50%, 50%); }
+        .mining { bottom: 70%; left: 40%; transform: translate(-50%, 50%); }
+        .logging { bottom: 85%; left: 30%; transform: translate(-50%, 50%); }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-800">Deforestation: A Quantified Risk vs. Impact Matrix</h1>
+            <p class="text-slate-600 mt-2">Comparing industries based on their operational impact and assumed risks.</p>
+        </header>
+
+        <main class="flex flex-col items-center">
+            <!-- Y-Axis Label -->
+            <div class="flex items-center w-full">
+                <div class="axis-label transform -rotate-90 whitespace-nowrap -ml-8 md:-ml-12">Operational Impact (Driver)</div>
+                
+                <div class="flex-grow">
+                    <div class="w-full flex justify-between -mb-6 pl-2">
+                         <span class="scale-label">Low</span>
+                         <span class="scale-label">High</span>
+                    </div>
+                    <div class="matrix-container">
+                        <div class="gridlines">
+                            <script>for(let i=0; i<100; i++) document.write('<div></div>');</script>
+                        </div>
+                        <!-- Quadrant Labels -->
+                        <div class="quadrant-label q-top-right">High Impact / High Risk</div>
+                        <div class="quadrant-label q-top-left">High Impact / Low Risk</div>
+                        <div class="quadrant-label q-bottom-right">Low Impact / High Risk</div>
+                        <div class="quadrant-label q-bottom-left">Low Impact / Low Risk</div>
+
+                        <!-- Data Points -->
+                        <div class="data-point agriculture">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-leaf"></i></div><span class="industry-label">Agriculture</span></div>
+                            <div class="tooltip"><h4>Agriculture</h4><strong>Impact: 9/10.</strong> Drives 75-96% of tropical deforestation.¹ Cattle (41%) & oilseeds (18%) lead.²<br><strong>Risk: 9/10.</strong> High physical, regulatory (EUDR), and market risks.³</div>
+                        </div>
+                        <div class="data-point food-beverage">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-cart-shopping"></i></div><span class="industry-label">Food & Bev</span></div>
+                            <div class="tooltip"><h4>Food & Beverage</h4><strong>Impact: 8/10 (Indirect).</strong> Demand for soy (77% for feed)⁴ & palm oil (~50% of products)⁵.<br><strong>Risk: 9/10.</strong> High supply chain, reputational, and EUDR compliance risks.³</div>
+                        </div>
+                        <div class="data-point automotive">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-car"></i></div><span class="industry-label">Automotive</span></div>
+                            <div class="tooltip"><h4>Automotive</h4><strong>Impact: 6/10.</strong> Major driver via leather (~50% of Brazil exports)⁶ & rubber (4M ha deforestation).⁷<br><strong>Risk: 7/10.</strong> High supply chain risk; directly targeted by EUDR.</div>
+                        </div>
+                        <div class="data-point personal-care">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-spa"></i></div><span class="industry-label">Personal Care</span></div>
+                            <div class="tooltip"><h4>Personal Care & Cosmetics</h4><strong>Impact: 3/10.</strong> Small volume driver (~2% cosmetics, 3% personal care of palm oil).⁸<br><strong>Risk: 8/10.</strong> Extreme reputational risk and direct EUDR impact.</div>
+                        </div>
+                        <div class="data-point pharma">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-capsules"></i></div><span class="industry-label">Pharmaceutical</span></div>
+                            <div class="tooltip"><h4>Pharmaceutical</h4><strong>Impact: 1/10.</strong> Negligible driver. <br><strong>Risk: 8/10.</strong> Existential R&D risk. 20% of medicinal plants at risk.⁹ Losing one potential drug every two years.¹⁰</div>
+                        </div>
+                        <div class="data-point software">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-laptop-code"></i></div><span class="industry-label">Software & IT</span></div>
+                            <div class="tooltip"><h4>Software & IT Services</h4><strong>Impact: 1/10.</strong> Land use impact is negligible. Primary environmental focus is on energy consumption and e-waste, not deforestation.¹¹<br><strong>Risk: 2/10.</strong> Low direct risk. Indirect risks from climate change affecting infrastructure.</div>
+                        </div>
+                        <div class="data-point mining">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-gem"></i></div><span class="industry-label">Mining</span></div>
+                            <div class="tooltip"><h4>Mining</h4><strong>Impact: 7/10.</strong> A major driver. Mining concessions overlapped with 8% of intact forests (2000-2013).¹²<br><strong>Risk: 4/10.</strong> Primary risks are regulatory and reputational, not operational risks from ecosystem collapse.</div>
+                        </div>
+                        <div class="data-point logging">
+                            <div class="icon-wrapper"><div class="icon"><i class="fa-solid fa-tree"></i></div><span class="industry-label">Unsustainable Logging</span></div>
+                            <div class="tooltip"><h4>Unsustainable Logging</h4><strong>Impact: 8/10.</strong> Illegal logging is a major industry, accounting for 15-30% of the global wood trade.¹³<br><strong>Risk: 3/10.</strong> Business model relies on forest removal. Faces high regulatory risk but low operational risk from biodiversity loss.</div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- X-Axis Label -->
+            <div class="w-full flex justify-between pl-12 md:pl-16 mt-2">
+                <span class="scale-label">Low</span>
+                <span class="axis-label">Risks Assumed (Affected)</span>
+                <span class="scale-label">High</span>
+            </div>
+        </main>
+
+        <footer class="mt-12 pt-8 border-t border-slate-300">
+            <h2 class="text-2xl font-bold text-slate-800 mb-6">Reference List</h2>
+            <ol class="list-decimal list-inside text-slate-700">
+                <!-- Existing references 1-10 -->
+                <li class="mb-6">
+                    <a href="https://academic.oup.com/bioscience/article/52/2/143/341135" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Geist, H. J., & Lambin, E. F. (2002). Proximate Causes and Underlying Driving Forces of Tropical Deforestation. <em>BioScience</em>.</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> A meta-analysis of 152 subnational case studies to quantify the frequency of drivers. Agricultural expansion was a proximate cause in 96% of cases.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://ourworldindata.org/drivers-of-deforestation" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Pendrill, F., et al. (2019). Agricultural and forestry trade drives large share of tropical deforestation emissions. <em>Global Environmental Change</em>.</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> Quantifies where deforestation occurs from agriculture/forestry expansion and what products are grown on this land (2005-2013).</p>
+                </li>
+                 <li class="mb-6">
+                    <a href="https://eur-lex.europa.eu/eli/reg/2023/1115/oj" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">European Commission. (2023). Regulation (EU) 2023/1115...</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> A legal document establishing regulatory risk. It mandates due diligence for cattle, cocoa, coffee, palm oil, rubber, soy, and wood to prove deforestation-free supply chains.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://www.science.org/doi/10.1126/science.aaq0216" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Poore, J., & Nemecek, T. (2018). Reducing food's environmental impacts... <em>Science</em>.</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> Meta-analysis of 570 life-cycle assessments (38,700 farms, 119 countries) to quantify food's environmental impacts.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://www.worldwildlife.org/stories/8-things-to-know-about-palm-oil" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">World Wildlife Fund (WWF). "8 Things to Know About Palm Oil".</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> Based on industry analysis and supply chain tracking, this statistic reflects the ubiquity of palm oil in processed supermarket foods.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://leadthecharge.org/resources/rfn/" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Lead The Charge. (2024). "The Road to a Deforestation-Free Auto Supply Chain".</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> Analysis of trade data and supply chain investigations linking leather exports from deforestation hotspots to the auto sector.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://leadthecharge.org/resources/rfn/" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Lead The Charge. (2024). "The Road to a Deforestation-Free Auto Supply Chain".</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> Analysis of land-use change data and commodity mapping to attribute forest loss to rubber plantation expansion since 1993.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://www.ctpa.org.uk/palm-oil" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">The Cosmetic, Toiletry and Perfumery Association (CTPA). "Palm Oil".</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> Industry analysis of global palm oil production volumes and consumption data by end-use sector.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://ecologi.com/articles/blog/industries-and-sectors-driving-deforestation-what-you-need-to-know" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Ecologi. (2023). "Industries and sectors driving deforestation...".</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> A synthesis of data from various environmental reports on known medicinal plants and the percentage threatened by habitat loss.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://www.jstor.org/stable/24942710" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Cox, P. A., & Balick, M. J. (1994). The Ethnobotanical Approach to Drug Discovery. <em>Scientific American</em>.</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> An estimate based on the rate of biodiversity loss and historical frequency of discovering novel compounds from natural sources.</p>
+                </li>
+                <!-- New references 11-13 -->
+                <li class="mb-6">
+                    <a href="https://www.nature.com/articles/s41558-020-0707-9" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Avellán, T. (2020). The digital tech industry and the climate crisis. <em>Nature Climate Change</em>.</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> A commentary synthesizing research on the environmental impact of the digital technology sector, highlighting that impacts are concentrated in the life cycle of hardware (e-waste) and energy consumption of data centers, not direct land use change.</p>
+                </li>
+                <li class="mb-6">
+                    <a href="https://advances.sciencemag.org/content/3/9/e1700557" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">Sonter, L. J., et al. (2017). Mining drives extensive deforestation in the Brazilian Amazon. <em>Science Advances</em>.</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> This study used satellite data to quantify deforestation caused directly by mining leases and indirectly by infrastructure (e.g., roads, railways) supporting mining operations in the Brazilian Amazon, finding mining-related deforestation is 12 times greater than what occurs inside mine leases alone.</p>
+                </li>
+                <li>
+                    <a href="https://www.interpol.int/Crimes/Environmental-crime/Forestry-crime" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold underline">INTERPOL. (n.d.). Forestry crime.</a>
+                    <p class="methodology mt-1 pl-4 border-l-2 border-slate-200 ml-1 text-sm text-slate-600 italic"><strong>Methodology:</strong> Based on analysis of global crime data and market intelligence, INTERPOL estimates that illegal logging comprises 15-30% of the global legal timber trade, representing a major direct driver of deforestation and forest degradation.</p>
+                </li>
+            </ol>
+        </footer>
+    </div>
+
+</body>
+</html>
